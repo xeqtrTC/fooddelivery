@@ -14,6 +14,7 @@ const sqlSelectChainByName = 'SELECT * FROM restaurantchain WHERE nameofcity = ?
 const sqlSelectRestaurantByName = 'SELECT * FROM restaurants WHERE name = ?';
 const sqlDeleteChainById = 'DELETE FROM restaurantchain WHERE id = ?';
 const sqlDeleteRestaurantById = 'DELETE FROM restaurants WHERE idrestaurants = ?';
+const sqlInsertIntoOrders = 'INSERT INTO orders SET ?';
 
 
 const deleteFood = (req, res) => {
@@ -188,6 +189,8 @@ const removeRestaurant = (req, res) => {
 
 const distance = async ({lat1, lon1, result, unit}) => {
 
+    //Haversine formula 
+
     let arrayToSend = []
     for (const results of result) {
         if(results.courier === 0) {
@@ -202,11 +205,12 @@ const distance = async ({lat1, lon1, result, unit}) => {
                     'lon2': valueOfLocations?.longitude,
                     'nameOfStreet': valueOfLocations?.formattedAddress,
                     'nameOfRestaurant': results?.name,
-                    'courier': results.courier
+                    'courier': results.courier,
+                    'idOfRestaurant': results.idrestaurants
                 }]
 
-                for ( const cords of coordinates) {
-                        console.log(cords);
+                for ( const cords of coordinates ) {
+
                     const radlat1 = Math.PI * lat1/180
 
                     const radlat2 = Math.PI * cords.lat2/180
@@ -233,6 +237,7 @@ const distance = async ({lat1, lon1, result, unit}) => {
                         "coordinates": transferIntoKM,
                         "nameOfStreet": cords.nameOfStreet,
                         'nameOfRestaurant': cords.nameOfRestaurant,
+                        'idOfRestaurant': cords.idOfRestaurant,
                         "courier": cords.courier
                     }
                     arrayToSend.push(arrayCombined);
@@ -248,7 +253,7 @@ const distance = async ({lat1, lon1, result, unit}) => {
 
   }
 
-  const calculateSmallestDistance = ({infoAboutNearest}) => {
+const calculateSmallestDistance = ({infoAboutNearest}) => {
     let i = infoAboutNearest.length;
 
     let smallestNumber = infoAboutNearest[0].coordinates;
@@ -259,17 +264,19 @@ const distance = async ({lat1, lon1, result, unit}) => {
                 'coordinates': number.coordinates,
                 'nameOfStreet': number.nameOfStreet,
                 'nameOfRestaurant': number.nameOfRestaurant,
+                'idOfRestaurant': number.idOfRestaurant
             }
         } else if (number.coordinates === smallestNumber) {  // ako je najblizi restoran prvi u arrayu
             smallestNumber = {
                 'coordinates': number.coordinates,
                 'nameOfStreet': number.nameOfStreet,
                 'nameOfRestaurant': number.nameOfRestaurant,
+                'idOfRestaurant': number.idOfRestaurant
             }
         }
     }
     return smallestNumber
-  }
+}
 
 const selectNearest = async (req, res) => {
     const sql = 'SELECT * FROM restaurants'
@@ -278,19 +285,65 @@ const selectNearest = async (req, res) => {
     const lat1 = location.latitude;
     const lon1 = location.longitude;
     let arrayToSend = []
-    connection.query(sql, async (err, result) => {
-        if(result) {
-            const infoAboutNearest = await distance({lat1, lon1, result})
-            if(infoAboutNearest.length === 0) {
-                console.log('nema restorana dostupnih')
-            } else {
-                const calculateNearest = calculateSmallestDistance({infoAboutNearest})
-                console.log(calculateNearest, "NEAREST");
+    return new Promise((resolve, reject) => {
+        connection.query(sql, async (err, result) => {
+            if(result) {
+                const infoAboutNearest = await distance({lat1, lon1, result})
+                if(infoAboutNearest.length === 0) {
+                    return reject({ message: "There isn't any restaurants"})
+                } else {
+                    const calculateNearest = calculateSmallestDistance({infoAboutNearest})
+                    
+                    return resolve(calculateNearest);
+                }
+                
             }
-            
+        })
+    })
+    
+}
+
+const orderFood = async (req, res) => {
+
+    const { idfood } = req.body;
+
+    const value = await selectNearest(req);
+    console.log(value);
+    connection.query(sqlInsertIntoOrders, {idfood: idfood, idrestaurant: value.idOfRestaurant, nameofstreet: value.nameOfStreet, timeorder: new Date()}, (err, resultOfInsert) => {
+        if(resultOfInsert.affectedRows > 0) {
+            return res.status(201).json({ message: 'You have successfully ordered a food'})
+        } else {
+            console.log(err);
+        }
+    } )
+
+
+
+
+}
+
+const seeIsTimePassed = (req, res) => {
+    connection.query('SELECT * FROM orders', (err, result) => {
+        if(result) {
+            const lastresult = result[2];
+            console.log(lastresult)
+            let past = new Date(lastresult.timeorder).getTime();
+            console.log(past);
+            const fiveMin = 1000 * 60 * 15;
+            console.log(fiveMin)
+            const isPast = (new Date().getTime() - past < fiveMin) ? console.log('ne') : console.log('da')
+            console.log(isPast);
         }
     })
-}
+}  
+
+    // naruci food, storuj u bazi, stavi restoraj da je zauzet
+    // sledeca narudzbina je posle 2 minuta  U TOM RESTORANU
+
+    //
+
+
+
 
 
 
@@ -303,5 +356,7 @@ module.exports = {
     addRestaurant,
     removeLocationChain,
     removeRestaurant,
-    selectNearest
+    selectNearest,
+    orderFood,
+    seeIsTimePassed
 }
