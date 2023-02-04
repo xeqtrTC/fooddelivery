@@ -260,7 +260,7 @@ const distance = async ({lat1, lon1, result, unit}) => {
                 'nameOfStreet': number.nameOfStreet,
                 'nameOfRestaurant': number.nameOfRestaurant,
             }
-        } else if (number.coordinates === smallestNumber) {
+        } else if (number.coordinates === smallestNumber) {  // ako je najblizi restoran prvi u arrayu
             smallestNumber = {
                 'coordinates': number.coordinates,
                 'nameOfStreet': number.nameOfStreet,
@@ -281,8 +281,12 @@ const selectNearest = async (req, res) => {
     connection.query(sql, async (err, result) => {
         if(result) {
             const infoAboutNearest = await distance({lat1, lon1, result})
-            const calculateNearest = calculateSmallestDistance({infoAboutNearest})
-            console.log(calculateNearest, "NEAREST");
+            if(infoAboutNearest.length === 0) {
+                console.log('nema restorana dostupnih')
+            } else {
+                const calculateNearest = calculateSmallestDistance({infoAboutNearest})
+                console.log(calculateNearest, "NEAREST");
+            }
             
         }
     })
