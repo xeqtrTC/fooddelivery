@@ -190,59 +190,85 @@ const distance = async ({lat1, lon1, result, unit}) => {
 
     let arrayToSend = []
     for (const results of result) {
-        const secondLocation = await geocoder.batchGeocode([results.geolocation])
+        if(results.courier === 0) {
+            const secondLocation = await geocoder.batchGeocode([results.geolocation])
+
             for (const locations of secondLocation) {
-                const test = locations.value[0]
-                console.log(test);
-                const cordinates = [{
-                    'lat2': test?.latitude,
-                    'lon2': test?.longitude,
-                    'nameOfStreet': test?.formattedAddress
+
+                const valueOfLocations = locations.value[0]
+
+                const coordinates = [{
+                    'lat2': valueOfLocations?.latitude,
+                    'lon2': valueOfLocations?.longitude,
+                    'nameOfStreet': valueOfLocations?.formattedAddress,
+                    'nameOfRestaurant': results?.name,
+                    'courier': results.courier
                 }]
-                for ( const cords of cordinates) {
-                    console.log(cords);
+
+                for ( const cords of coordinates) {
+                        console.log(cords);
                     const radlat1 = Math.PI * lat1/180
+
                     const radlat2 = Math.PI * cords.lat2/180
+
                     const theta = lon1-cords.lon2
+
                     const radtheta = Math.PI * theta/180
+
                     let dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+
                     if (dist > 1) {
                       dist = 1;
                     }
 
                     dist = Math.acos(dist)
+
                     dist = dist * 180/Math.PI
+
                     dist = dist * 60 * 1.1515
+
                     const transferIntoKM = dist * 1.609344
+
                     const arrayCombined = {
-                        "cordiantes": transferIntoKM,
-                        "imeulice": cords.nameOfStreet
+                        "coordinates": transferIntoKM,
+                        "nameOfStreet": cords.nameOfStreet,
+                        'nameOfRestaurant': cords.nameOfRestaurant,
+                        "courier": cords.courier
                     }
                     arrayToSend.push(arrayCombined);
                     
                 }
     
             }
+        } 
+       
     }
-    // console.log(acab);
     return arrayToSend
     
 
   }
 
-  const calculateSmallestDistance = ({testacab}) => {
-    let i = testacab.length;
-    let smallestNumber = testacab[0].cordiantes;
-    for (const number of testacab) {
-        console.log('number', number);
-        if (number?.cordiantes < smallestNumber){
+  const calculateSmallestDistance = ({infoAboutNearest}) => {
+    let i = infoAboutNearest.length;
+
+    let smallestNumber = infoAboutNearest[0].coordinates;
+
+    for (const number of infoAboutNearest) {
+        if (number?.coordinates < smallestNumber) {
             smallestNumber = {
-                'coridantes': number.cordiantes,
-                'imeulice': number.imeulice
+                'coordinates': number.coordinates,
+                'nameOfStreet': number.nameOfStreet,
+                'nameOfRestaurant': number.nameOfRestaurant,
+            }
+        } else if (number.coordinates === smallestNumber) {
+            smallestNumber = {
+                'coordinates': number.coordinates,
+                'nameOfStreet': number.nameOfStreet,
+                'nameOfRestaurant': number.nameOfRestaurant,
             }
         }
     }
-    console.log(smallestNumber);
+    return smallestNumber
   }
 
 const selectNearest = async (req, res) => {
@@ -256,15 +282,10 @@ const selectNearest = async (req, res) => {
         if(result) {
             const infoAboutNearest = await distance({lat1, lon1, result})
             const calculateNearest = calculateSmallestDistance({infoAboutNearest})
-          
-            console.log(infoAboutNearest);
-           
+            console.log(calculateNearest, "NEAREST");
             
-
         }
     })
-    return res.json(arrayToSend);
-    
 }
 
 
