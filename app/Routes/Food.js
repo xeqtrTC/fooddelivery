@@ -19,4 +19,7 @@ router.route('/listOfFood').get(foodRouter.listOfFood)
 router.route('/detailsOfFood/:idfood').get(foodRouter.foodDetailsById)
 router.route('/selectNearest').get(foodRouter.selectNearest)
 router.route('/seeIsTimePassed').get(foodRouter.seeIsTimePassed);
+
+
+
 module.exports = router;

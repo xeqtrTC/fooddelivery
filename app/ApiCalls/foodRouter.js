@@ -193,7 +193,6 @@ const distance = async ({lat1, lon1, result, unit}) => {
 
     let arrayToSend = []
     for (const results of result) {
-        if(results.courier === 0) {
             const secondLocation = await geocoder.batchGeocode([results.geolocation])
 
             for (const locations of secondLocation) {
@@ -245,7 +244,6 @@ const distance = async ({lat1, lon1, result, unit}) => {
                 }
     
             }
-        } 
        
     }
     return arrayToSend
@@ -280,13 +278,13 @@ const calculateSmallestDistance = ({infoAboutNearest}) => {
 
 const selectNearest = async (req, res) => {
     const sql = 'SELECT * FROM restaurants'
+    const sql1 = 'SELECT * FROM `restaurants` WHERE `idrestaurants` NOT IN (SELECT `idrestaurant` FROM `orders` WHERE `timeorder` > NOW() - INTERVAL 15 MINUTE);'
 
     const [location] = await geocoder.geocode(req.user.geolocation)
     const lat1 = location.latitude;
     const lon1 = location.longitude;
-    let arrayToSend = []
     return new Promise((resolve, reject) => {
-        connection.query(sql, async (err, result) => {
+        connection.query(sql1, async (err, result) => {
             if(result) {
                 const infoAboutNearest = await distance({lat1, lon1, result})
                 if(infoAboutNearest.length === 0) {
@@ -337,10 +335,22 @@ const seeIsTimePassed = (req, res) => {
     })
 }  
 
-    // naruci food, storuj u bazi, stavi restoraj da je zauzet
-    // sledeca narudzbina je posle 2 minuta  U TOM RESTORANU
+// const seesql = (req, res) => {
+//     const test = (10+2+5+2+5+10) / 5;
+//     console.log(Math.round(test))
+   
+//     const sql12 = 'SELECT * FROM `restaurants` WHERE `idrestaurants` NOT IN (SELECT `idrestaurant` FROM `orders` WHERE `timeorder` > NOW() - INTERVAL 15 MINUTE);'
+//     connection.query(sql12, (err, result) => {
+//         if(result) {
+//             return res.json(result);
+//         } else {
+//             console.log(err);
+//         }
+//     })
+    
+// }
 
-    //
+    
 
 
 
@@ -358,5 +368,6 @@ module.exports = {
     removeRestaurant,
     selectNearest,
     orderFood,
-    seeIsTimePassed
+    seeIsTimePassed,
+    
 }
