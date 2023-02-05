@@ -1,4 +1,5 @@
 
+const { json } = require('body-parser');
 const express = require('express');
 const connection = require('../database/database');
 const geocoder = require('../geolocation/geolocation');
@@ -15,6 +16,8 @@ const sqlSelectRestaurantByName = 'SELECT * FROM restaurants WHERE name = ?';
 const sqlDeleteChainById = 'DELETE FROM restaurantchain WHERE id = ?';
 const sqlDeleteRestaurantById = 'DELETE FROM restaurants WHERE idrestaurants = ?';
 const sqlInsertIntoOrders = 'INSERT INTO orders SET ?';
+const sqlInsertIntoRatings = 'INSERT INTO ratings SET ?';
+const sqlCheckUserRating = 'SELECT * FROM ratings WHERE whorated = ? AND foodid = ?'
 
 
 const deleteFood = (req, res) => {
@@ -38,10 +41,20 @@ const deleteFood = (req, res) => {
 }
 
 const listOfFood = (req, res) => {
+    console.log(req.query.value)
 
     connection.query(sqlSelectFood, (err, resultOfSelect) => {
         if(resultOfSelect.length > 0) {
-            return res.status(200).json(resultOfSelect)
+            connection.query('SELECT',  (err, resultInfo) => {
+                if(resultInfo) {
+                    console.log(resultInfo);
+                } else {
+                    console.log(err);
+                }
+            })
+            const sortByRating = resultOfSelect.sort((a, b) => { return b.foodrating - a.foodrating })
+            console.log(sortByRating);
+            return res.status(200).json(sortByRating)
         } else {
             return res.status(409).json({ message: "There isn't any food"})
         }
@@ -244,11 +257,8 @@ const distance = async ({lat1, lon1, result, unit}) => {
                 }
     
             }
-       
     }
     return arrayToSend
-    
-
   }
 
 const calculateSmallestDistance = ({infoAboutNearest}) => {
@@ -285,16 +295,18 @@ const selectNearest = async (req, res) => {
     const lon1 = location.longitude;
     return new Promise((resolve, reject) => {
         connection.query(sql1, async (err, result) => {
-            if(result) {
+            if(result.length > 0) {
                 const infoAboutNearest = await distance({lat1, lon1, result})
                 if(infoAboutNearest.length === 0) {
-                    return reject({ message: "There isn't any restaurants"})
+                    return reject(false)
                 } else {
                     const calculateNearest = calculateSmallestDistance({infoAboutNearest})
                     
                     return resolve(calculateNearest);
                 }
                 
+            } else {
+                return reject(false)
             }
         })
     })
@@ -305,16 +317,22 @@ const orderFood = async (req, res) => {
 
     const { idfood } = req.body;
 
-    const value = await selectNearest(req);
-    console.log(value);
-    connection.query(sqlInsertIntoOrders, {idfood: idfood, idrestaurant: value.idOfRestaurant, nameofstreet: value.nameOfStreet, timeorder: new Date()}, (err, resultOfInsert) => {
-        if(resultOfInsert.affectedRows > 0) {
-            return res.status(201).json({ message: 'You have successfully ordered a food'})
-        } else {
-            console.log(err);
-        }
-    } )
+    try {
+        const value = await selectNearest(req)
+            connection.query(sqlInsertIntoOrders, {idfood: idfood, idrestaurant: value.idOfRestaurant, nameofstreet: value.nameOfStreet, iduserorder: req.user.iduser, timeorder: new Date()}, (err, resultOfInsert) => {
+                if(resultOfInsert.affectedRows > 0) {
+                    return res.status(201).json({ message: 'You have successfully ordered a food'})
+                } else {
+                    console.log(err);
+                    return res.status(401).json({ message: 'Something broke'})
+                }
+            } )    
+    } catch (error) {
+        return res.status(401).json({ message: "There isn't any available right now, try again later"})
 
+    }
+   
+    
 
 
 
@@ -335,21 +353,121 @@ const seeIsTimePassed = (req, res) => {
     })
 }  
 
-// const seesql = (req, res) => {
-//     const test = (10+2+5+2+5+10) / 5;
-//     console.log(Math.round(test))
-   
-//     const sql12 = 'SELECT * FROM `restaurants` WHERE `idrestaurants` NOT IN (SELECT `idrestaurant` FROM `orders` WHERE `timeorder` > NOW() - INTERVAL 15 MINUTE);'
-//     connection.query(sql12, (err, result) => {
-//         if(result) {
-//             return res.json(result);
-//         } else {
-//             console.log(err);
-//         }
-//     })
-    
-// }
+const addReview = (req, res) => {
 
+   const { foodid, ratingValue } = req.body;
+   const idOfUser = req.user.iduser;
+
+   
+
+    connection.query(sqlCheckUserRating, [idOfUser, foodid], (err, result) => {
+        if(result.length > 0) {
+            return res.status(401).json({ message: 'You already rated this food!'})
+        } else if (ratingValue > 5) {
+            return res.status(401).json({ message: '5 is maximum value you can add'})
+        } else {
+            connection.query(sqlInsertIntoRatings, {foodid: foodid, ratingvalue: ratingValue, whorated: idOfUser }, async (err, resultOfInsert) => {
+                if(resultOfInsert.affectedRows > 0) {
+            
+                    
+                    try {
+
+                        await updateRating(foodid)
+                        return res.status(200).json({ message: 'You have successfully rated this food!'})
+                        
+                    } catch (error) {
+                        return res.status(200).json({ message: 'Added review but rating failed'})
+                    }
+               
+                } else {
+                    return res.status(401).json({ message: 'Something broke!'})
+                }
+            })
+        }
+    })
+
+}
+const averageNumber = (listOfRatings) => {
+
+    let sum = 0;
+
+    listOfRatings.forEach((item) => sum += item);
+
+    const averageValue = sum / listOfRatings.length;
+
+    return averageValue
+
+}
+
+const updateRating = (foodid) => {
+
+    const sql5 = 'UPDATE food SET foodrating = ? WHERE idfood = ?';
+    const sql6 = 'SELECT ratingvalue from ratings WHERE foodid = ?';
+    let sum = 0;
+    let listOfRatings = []
+
+    return new Promise((resolve, reject) => {
+        connection.query(sql6, [foodid], (err, resultOfCheck) => {
+            if(resultOfCheck.length > 0) {
+
+                resultOfCheck.forEach((item) => listOfRatings.push(item.ratingvalue))
+
+                const result = averageNumber(listOfRatings)
+                
+                if (result) {
+                    connection.query(sql5, [result, foodid], (err, resultOfUpdate) => {
+                        if(resultOfUpdate.affectedRows > 0) {
+                            return resolve(true)
+                        } else {
+                            return reject(false)
+                        }
+                    })
+                }     
+
+            } else {
+                return reject(false)
+            }
+        })
+    })
+    
+    
+}
+
+
+const addComments = (req, res) => {
+
+    const { idfood, comment } = req.body;
+
+    const sql = 'SELECT * FROM orders WHERE idfood = ? AND iduserorder = ?';
+    const sql2 = 'INSERT INTO comments SET ?'
+    connection.query(sql2, {idfood: idfood, iduser: req.user.iduser, comment: comment}, (err, resultOfInsert) => {
+        if(resultOfInsert.affectedRows > 0) {
+            return res.status(201).json({ message: 'You have successfully added a comment!'})
+        } else {
+            return res.status(401).json({ message: 'Something broke!'})
+        }
+    })
+    // connection.query(sql, [idfood, req.user.iduser], (err, resultOfCheck) => {
+    //     if(resultOfCheck.length > 0) {
+    //         if(comment.length > 1000) {
+    //             return res.status(401).json({ message: 'Maximum letters for comment is 1000'})
+    //         } else {
+    //             connection.query(sql2, {idfood: idfood, iduser: req.user.iduser, comment: comment}, (err, resultOfInsert) => {
+    //                 if(resultOfInsert.affectedRows > 0) {
+    //                     return res.status(201).json({ message: 'You have successfully added a comment!'})
+    //                 } else {
+    //                     return res.status(401).json({ message: 'Something broke!'})
+    //                 }
+    //             })
+    //         }
+            
+
+    //     } else {
+    //         return res.status(401).json({ message: "You didn't order this food, you can't comment it!"})
+    //     }
+    // })
+
+}
     
 
 
@@ -369,5 +487,8 @@ module.exports = {
     selectNearest,
     orderFood,
     seeIsTimePassed,
+    updateRating,
+    addReview,
+    addComments
     
 }

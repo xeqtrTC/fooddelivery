@@ -34,19 +34,23 @@ app.post('/addfood', upload.single('image'), (req, res, next) => {
     const { foodname, foodprice } = req.body;
     const image = req.file.filename
     const sql = 'INSERT INTO food SET ?';
-    try {
-        connection.query(sql, {foodname: foodname, foodprice: foodprice, foodimage: image, fooddate: new Date()}, (err, resultOfInsert) => {
-            if(resultOfInsert.affectedRows > 0) {
-                return res.status(200).json({ message: 'You have added food!'})
-            }  else {
-                console.log(err);
+    const sql1 = 'SELECT foodname FROM food WHERE foodname = ?';
+        connection.query(sql1, [foodname], (err, resultOfCheck) => {
+            if(resultOfCheck.length > 0) {
+                return res.status(401).json({ message: 'Under this name food already exists'})
+            } else {
+                connection.query(sql, {foodname: foodname, foodprice: foodprice, foodimage: image, fooddate: new Date()}, (err, resultOfInsert) => {
+                    if(resultOfInsert.affectedRows > 0) {
+                        return res.status(200).json({ message: 'You have added food!'})
+                    }  else {
+                        return res.status(401).json({ message: 'Something broke!'})
+                    }
+                })
             }
         })
+        
 
-    } catch (err) {
-        return res.status(401).json({ message: 'Something went wrong!'})
-    }
-
+    
 
 })
 
