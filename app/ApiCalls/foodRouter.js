@@ -18,6 +18,43 @@ const sqlDeleteRestaurantById = 'DELETE FROM restaurants WHERE idrestaurants = ?
 const sqlInsertIntoOrders = 'INSERT INTO orders SET ?';
 const sqlInsertIntoRatings = 'INSERT INTO ratings SET ?';
 const sqlCheckUserRating = 'SELECT * FROM ratings WHERE whorated = ? AND foodid = ?'
+const sqlCheckOrder = 'SELECT * FROM orders WHERE idfood = ? AND iduserorder = ?';
+const sqlInsertComments = 'INSERT INTO comments SET ?'
+const updateFoodRating = 'UPDATE food SET foodrating = ? WHERE idfood = ?';
+const sqlSelectRatingValue = 'SELECT ratingvalue from ratings WHERE foodid = ?';
+const sqlSelectNearest = 'SELECT * FROM restaurants WHERE idrestaurants NOT IN (SELECT idrestaurant FROM orders WHERE timeorder > NOW() - INTERVAL 15 MINUTE)'
+const sqlCheckFoodById = 'SELECT idfood FROM food WHERE idfood = ?'
+const sqlInsertFood = 'INSERT INTO food SET ?';
+const sqlCheckInsertFoodName = 'SELECT foodname FROM food WHERE foodname = ?';
+
+const addFood =  (req, res, next) => {
+
+    // To access image from backend http://localhost:5005/image/aimbot.png
+
+    const { foodname, foodprice } = req.body;
+    const image = req.file?.filename
+
+    if (req.user === undefined || req.user.admin === 0 || foodname.length === 0 || foodprice.length === 0 || image === undefined) {
+        return res.status(401).json({ message: 'Not allwoed'})
+    } else if (req.user.admin > 0) {
+        connection.query(sqlCheckInsertFoodName, [foodname], (err, resultOfCheck) => {
+            if(resultOfCheck.length > 0) {
+                return res.status(401).json({ message: 'Under this name food already exists'})
+            } else {
+                connection.query(sqlInsertFood, {foodname: foodname, foodprice: foodprice, foodimage: image, fooddate: new Date()}, (err, resultOfInsert) => {
+                    if(resultOfInsert.affectedRows > 0) {
+                        return res.status(200).json({ message: 'You have added food!'})
+                    }  else {
+                        return res.status(401).json({ message: 'Something broke!'})
+                    }
+                })
+            }
+        })
+    }
+        
+    
+
+}
 
 
 const deleteFood = (req, res) => {
@@ -27,50 +64,95 @@ const deleteFood = (req, res) => {
     if(req.user === undefined || req.user.admin === 0) {
         return res.status(401).json({ message: 'Not allowed'})
     } else {
-        connection.query(sqlDeleteFood, [idfood], (err, resultOfDelete) => {
-            if(resultOfDelete.affectedRows > 0){
-                return res.status(200).json({ message: 'You have deleted food!'})
-            } else if (err === null) {
-                return res.status(409).json({ message: `Under that ${idfood} ID food doesn't exist!`})
+        connection.query(sqlCheckFoodById, [idfood], (err, resultOfCheck) => {
+            if(resultOfCheck.length > 0) {
+                connection.query(sqlDeleteFood, [idfood], (err, resultOfDelete) => {
+                    if(resultOfDelete.affectedRows > 0){
+                        return res.status(200).json({ message: 'You have deleted food!'})
+                    } else {
+                        return res.status(409).json({ message: `Something wrong `})
+                    }
+                })          
             } else {
-                return res.status(409).json({ message: `Something wrong `})
+                return res.status(401).json({ message: "Food under that ID doesn't exist"})
             }
         })
+      
     }
 
 }
+const getListOfCommentsPerFood =  (idfood, limit) => {
+    return new Promise((resolve, reject) => {
+        connection.query(`select * from comments where idfoodcomment = ? LIMIT ${limit}`, [idfood], (err, result) => {
+            if(result) {
+                return resolve(result)
+            } else {
+                return reject(false);
+            }
+        })
+    })
+}
 
-const listOfFood = (req, res) => {
-    console.log(req.query.value)
+const getListOfCommentsAndFood = async ( arrayOfFood, limit ) => {
+    let list = []
+    try {
+        for (const eachFood of arrayOfFood) {
+            const arrows = await getListOfCommentsPerFood(eachFood.idfood, limit);
+            const newArray = {
+                "foodid": eachFood.idfood,
+                "foodname": eachFood.foodname,
+                "foodrating": eachFood.foodrating,
+                "foodprice": eachFood.foodprice,
+                "comments": arrows
+            }
+            list.push(newArray)
+        }
+        return list
+    } catch (error) {
+        console.log(error);
+    }
+        
+    
 
-    connection.query(sqlSelectFood, (err, resultOfSelect) => {
-        if(resultOfSelect.length > 0) {
-            connection.query('SELECT',  (err, resultInfo) => {
-                if(resultInfo) {
-                    console.log(resultInfo);
-                } else {
-                    console.log(err);
-                }
-            })
-            const sortByRating = resultOfSelect.sort((a, b) => { return b.foodrating - a.foodrating })
-            console.log(sortByRating);
+}
+
+const listOfFood = async (req, res) => {
+    
+    let limit = req.query.id
+
+
+    if(limit === undefined) {
+        limit = 1;
+    }
+
+    connection.query(sqlSelectFood, async(err, arrayOfFood) => {
+        if (arrayOfFood.length > 0) {
+            const rest = await getListOfCommentsAndFood(arrayOfFood, limit)
+
+            const sortByRating = rest.sort((a, b) => { return b.foodrating - a.foodrating});
+
             return res.status(200).json(sortByRating)
         } else {
-            return res.status(409).json({ message: "There isn't any food"})
+            return res.status(401).json({ message: "There isn't any food!"})
         }
     })
-
 
 }
 
 const foodDetailsById = (req, res) => {
     const idfood = req.params.idfood
 
-    connection.query(sqlSelectFoodDetails, [idfood], (err, resultOfDetails) => {
-        if(resultOfDetails.length > 0) {
-            return res.status(200).json(resultOfDetails)
+    connection.query(sqlCheckFoodById, [idfood], (err, resultOfCheck) => {
+        if(resultOfCheck.length > 0) {
+            connection.query(sqlSelectFoodDetails, [idfood], (err, resultOfDetails) => {
+                if(resultOfDetails.length > 0) {
+                    return res.status(200).json(resultOfDetails)
+                } else {
+                    return res.status(409).json({ message: "Under that ID food doesn't exist "})
+                }
+            })
         } else {
-            return res.status(409).json({ message: "Under that ID food doesn't exist "})
+            return res.status(401).json({ message: "Under that ID food doesn't exist"})
         }
     })
 }
@@ -97,82 +179,33 @@ const addLocationToChain = (req, res) => {
 
 const addRestaurant = async (req, res) => {
 
-    const { nameofrestaraunt, geolocation, geolocationname } = req.body;
-
-    const location = await geocoder.geocode(geolocationname);
+    const { nameofrestaraunt, geolocationname } = req.body;
     
+    console.log(nameofrestaraunt, geolocationname);
 
-    if(req.user === undefined || req.user.admin === 0) {
+
+    
+    
+    if(req.user === undefined || req.user.admin === 0 || nameofrestaraunt.length === 0|| geolocationname.length === 0) {
         return res.status(401).json({ message: 'You are not allowed!'})
     } else if (req.user.admin > 0) {
+        
+        const location = await geocoder.geocode(geolocationname);
 
-        connection.query(sqlSelectChainByName, [geolocation], (err, resultOfCheck) => {
-            if(resultOfCheck.length > 0) {
-
-                const idofchain = resultOfCheck[0].id
-
-                connection.query(sqlSelectRestaurantByName, [nameofrestaraunt], (err, resultOfSecondCheck) => {
-                    if(resultOfSecondCheck.length > 0) {
-                        return res.status(401).json({ message: 'Restaraunt under that name already exists!'})
+        connection.query(sqlSelectRestaurantByName, [nameofrestaraunt], (err, resultOfSecondCheck) => {
+            if(resultOfSecondCheck.length > 0) {
+                return res.status(401).json({ message: 'Restaraunt under that name already exists!'})
+            } else {
+                connection.query(sqlInsertRestaurants, {name: nameofrestaraunt, geolocation: location[0].formattedAddress}, (err, resultOfInsert) => {
+                    if(resultOfInsert) {
+                        return res.status(201).json({ message: 'You have successfully added new restaurant'})
                     } else {
-                        connection.query(sqlInsertRestaurants, {name: nameofrestaraunt, idofgeolocation: idofchain, geolocation: location[0].formattedAddress}, (err, resultOfInsert) => {
-                            if(resultOfInsert) {
-                                return res.status(201).json({ message: 'You have successfully added new restaurant'})
-                            } else {
-                                return res.status(401).json({ message: "Under that id location doesn't exist"})
-                            }
-                        })
+                        return res.status(401).json({ message: "Under that id location doesn't exist"})
                     }
                 })
-                
-            } else {
-                console.log(err);
-                return res.status(401).json({ message: 'That city doesnt exist'})
             }
         })
-
-        // connection.query(sql, {name: nameofrestaraunt, idofgeolocation: idofchain}, (err, resultOfInsert) => {
-        //     if(resultOfInsert) {
-        //         return res.status(201).json({ message: 'You have successfully added new restaurant'})
-        //     } else {
-        //         return res.status(401).json({ message: "Under that id location doesn't exist"})
-        //     }
-        // })
-
     }
-
-}
-
-const removeLocationChain = (req, res) => {
-    const { nameofcity } = req.body;
-
-
-    if(req.user === undefined || req.user.admin === 0) {
-        return res.status(401).json({ message: 'You are not allowed'})
-    } else if (req.user.admin > 0) {
-
-        connection.query(sqlSelectChainByName, [nameofcity], (err, resultOfCheck) => {
-            console.log(resultOfCheck)
-            if(resultOfCheck.length > 0) {
-                const id = resultOfCheck[0].id
-                connection.query(sqlDeleteChainById, [id], (err, resultOfDelete) => {
-                    if(resultOfDelete.affectedRows > 0) {
-                        return res.status(201).json({ message: 'You have successfully deleted location!'})
-                    } else {
-                        console.log(err);
-                        return res.status(401).json({ message: "Under that ID location doesn't exist"})
-                    }
-                })
-            } else {
-                return res.status(401).json({ message: "City under that name doesn't exist"})
-            }
-        })
-
-        
-        
-
-    }
-
 }
 
 const removeRestaurant = (req, res) => {
@@ -185,11 +218,12 @@ const removeRestaurant = (req, res) => {
         
         connection.query(sqlSelectRestaurantByName, [name], (err, resultOfCheck) => {
             if(resultOfCheck.length > 0) {
-                const id = resultOfCheck[0].id
+                const id = resultOfCheck[0].idrestaurants
                 connection.query(sqlDeleteRestaurantById, [id], (err, resultOfDelete) => {
                     if(resultOfDelete.affectedRows > 0) {
                         return res.status(200).json({ message: `You have successfully deleted ${name} restaurant`})
                     } else {
+                        console.log(err);
                         return res.status(401).json({ message: 'Something went wrong!'})
                     }
                 })
@@ -287,14 +321,15 @@ const calculateSmallestDistance = ({infoAboutNearest}) => {
 }
 
 const selectNearest = async (req, res) => {
-    const sql = 'SELECT * FROM restaurants'
-    const sql1 = 'SELECT * FROM `restaurants` WHERE `idrestaurants` NOT IN (SELECT `idrestaurant` FROM `orders` WHERE `timeorder` > NOW() - INTERVAL 15 MINUTE);'
 
     const [location] = await geocoder.geocode(req.user.geolocation)
+
     const lat1 = location.latitude;
+
     const lon1 = location.longitude;
+
     return new Promise((resolve, reject) => {
-        connection.query(sql1, async (err, result) => {
+        connection.query(sqlSelectNearest, async (err, result) => {
             if(result.length > 0) {
                 const infoAboutNearest = await distance({lat1, lon1, result})
                 if(infoAboutNearest.length === 0) {
@@ -317,16 +352,27 @@ const orderFood = async (req, res) => {
 
     const { idfood } = req.body;
 
+    if( idfood.length === 0) {
+        return res.status(401).json({ message: 'Empty string'})
+    }
+
     try {
         const value = await selectNearest(req)
-            connection.query(sqlInsertIntoOrders, {idfood: idfood, idrestaurant: value.idOfRestaurant, nameofstreet: value.nameOfStreet, iduserorder: req.user.iduser, timeorder: new Date()}, (err, resultOfInsert) => {
-                if(resultOfInsert.affectedRows > 0) {
-                    return res.status(201).json({ message: 'You have successfully ordered a food'})
+            connection.query('SELECT idfood FROM food WHERE idfood = ?', [idfood], (err, resultOfCheck) => {
+                if(resultOfCheck.length > 0) {
+                    connection.query(sqlInsertIntoOrders, {idfood: idfood, idrestaurant: value.idOfRestaurant, nameofstreet: value.nameOfStreet, iduserorder: req.user.iduser, timeorder: new Date()}, (err, resultOfInsert) => {
+                        if(resultOfInsert.affectedRows > 0) {
+                            return res.status(201).json({ message: 'You have successfully ordered a food'})
+                        } else {
+                            console.log(err);
+                            return res.status(401).json({ message: 'Something broke'})
+                        }
+                    } ) 
                 } else {
-                    console.log(err);
-                    return res.status(401).json({ message: 'Something broke'})
+                    return res.status(401).json({ message: "That food doesn't exist"})
                 }
-            } )    
+            })
+               
     } catch (error) {
         return res.status(401).json({ message: "There isn't any available right now, try again later"})
 
@@ -358,34 +404,39 @@ const addReview = (req, res) => {
    const { foodid, ratingValue } = req.body;
    const idOfUser = req.user.iduser;
 
-   
-
-    connection.query(sqlCheckUserRating, [idOfUser, foodid], (err, result) => {
-        if(result.length > 0) {
-            return res.status(401).json({ message: 'You already rated this food!'})
-        } else if (ratingValue > 5) {
-            return res.status(401).json({ message: '5 is maximum value you can add'})
-        } else {
-            connection.query(sqlInsertIntoRatings, {foodid: foodid, ratingvalue: ratingValue, whorated: idOfUser }, async (err, resultOfInsert) => {
-                if(resultOfInsert.affectedRows > 0) {
-            
-                    
-                    try {
-
-                        await updateRating(foodid)
-                        return res.status(200).json({ message: 'You have successfully rated this food!'})
-                        
-                    } catch (error) {
-                        return res.status(200).json({ message: 'Added review but rating failed'})
-                    }
-               
+    connection.query(sqlCheckFoodById, [foodid], (err, resultOfCheck) => {
+        if(resultOfCheck.length > 0) {
+            connection.query(sqlCheckUserRating, [idOfUser, foodid], (err, result) => {
+                if(result.length > 0) {
+                    return res.status(401).json({ message: 'You already rated this food!'})
+                } else if (ratingValue > 5) {
+                    return res.status(401).json({ message: '5 is maximum value you can add'})
                 } else {
-                    return res.status(401).json({ message: 'Something broke!'})
+                    connection.query(sqlInsertIntoRatings, {foodid: foodid, ratingvalue: ratingValue, whorated: idOfUser }, async (err, resultOfInsert) => {
+                        if(resultOfInsert.affectedRows > 0) {
+                    
+                            
+                            try {
+        
+                                await updateRating(foodid)
+                                return res.status(200).json({ message: 'You have successfully rated this food!'})
+                                
+                            } catch (error) {
+                                return res.status(200).json({ message: 'Added review but rating failed'})
+                            }
+                       
+                        } else {
+                            return res.status(401).json({ message: 'Something broke!'})
+                        }
+                    })
                 }
             })
+        
+        } else {
+            return res.status(401).json({ message: "Food under that ID doesn't exist"})
         }
     })
-
+    
 }
 const averageNumber = (listOfRatings) => {
 
@@ -401,13 +452,11 @@ const averageNumber = (listOfRatings) => {
 
 const updateRating = (foodid) => {
 
-    const sql5 = 'UPDATE food SET foodrating = ? WHERE idfood = ?';
-    const sql6 = 'SELECT ratingvalue from ratings WHERE foodid = ?';
     let sum = 0;
     let listOfRatings = []
 
     return new Promise((resolve, reject) => {
-        connection.query(sql6, [foodid], (err, resultOfCheck) => {
+        connection.query(sqlSelectRatingValue, [foodid], (err, resultOfCheck) => {
             if(resultOfCheck.length > 0) {
 
                 resultOfCheck.forEach((item) => listOfRatings.push(item.ratingvalue))
@@ -415,7 +464,7 @@ const updateRating = (foodid) => {
                 const result = averageNumber(listOfRatings)
                 
                 if (result) {
-                    connection.query(sql5, [result, foodid], (err, resultOfUpdate) => {
+                    connection.query(updateFoodRating, [result, foodid], (err, resultOfUpdate) => {
                         if(resultOfUpdate.affectedRows > 0) {
                             return resolve(true)
                         } else {
@@ -438,34 +487,34 @@ const addComments = (req, res) => {
 
     const { idfood, comment } = req.body;
 
-    const sql = 'SELECT * FROM orders WHERE idfood = ? AND iduserorder = ?';
-    const sql2 = 'INSERT INTO comments SET ?'
-    connection.query(sql2, {idfood: idfood, iduser: req.user.iduser, comment: comment}, (err, resultOfInsert) => {
-        if(resultOfInsert.affectedRows > 0) {
-            return res.status(201).json({ message: 'You have successfully added a comment!'})
-        } else {
-            return res.status(401).json({ message: 'Something broke!'})
-        }
-    })
-    // connection.query(sql, [idfood, req.user.iduser], (err, resultOfCheck) => {
-    //     if(resultOfCheck.length > 0) {
-    //         if(comment.length > 1000) {
-    //             return res.status(401).json({ message: 'Maximum letters for comment is 1000'})
-    //         } else {
-    //             connection.query(sql2, {idfood: idfood, iduser: req.user.iduser, comment: comment}, (err, resultOfInsert) => {
-    //                 if(resultOfInsert.affectedRows > 0) {
-    //                     return res.status(201).json({ message: 'You have successfully added a comment!'})
-    //                 } else {
-    //                     return res.status(401).json({ message: 'Something broke!'})
-    //                 }
-    //             })
-    //         }
+   
+    connection.query(sqlCheckOrder, [idfood, req.user.iduser], (err, resultOfCheck) => {
+        if(resultOfCheck.length > 0) {
+            if(comment.length > 1000) {
+                return res.status(401).json({ message: 'Maximum letters for comment is 1000'})
+            } else {
+                connection.query(sqlCheckFoodById, [idfood], (err, resultOfCheck) => {
+                    if(resultOfCheck.length > 0) {
+                        connection.query(sqlInsertComments, {idfoodcomment: idfood, idusercomment: req.user.iduser, comment: comment}, (err, resultOfInsert) => {
+                            if(resultOfInsert.affectedRows > 0) {
+                                return res.status(201).json({ message: 'You have successfully added a comment!'})
+                            } else {
+                                console.log(err);
+                                return res.status(401).json({ message: 'Something broke!'})
+                            }
+                        })   
+                    } else {
+                        console.log(err);
+                        return res.status(401).json({ message: "Food under that ID doesn't exist!"})
+                    }
+                })
+            }
             
 
-    //     } else {
-    //         return res.status(401).json({ message: "You didn't order this food, you can't comment it!"})
-    //     }
-    // })
+        } else {
+            return res.status(401).json({ message: "You didn't order this food, you can't comment it!"})
+        }
+    })
 
 }
     
@@ -482,13 +531,13 @@ module.exports = {
     foodDetailsById,
     addLocationToChain,
     addRestaurant,
-    removeLocationChain,
     removeRestaurant,
     selectNearest,
     orderFood,
     seeIsTimePassed,
     updateRating,
     addReview,
-    addComments
+    addComments,
+    addFood
     
 }

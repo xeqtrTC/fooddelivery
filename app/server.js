@@ -10,56 +10,18 @@ const sessionStore = require('./database/session');
 const session = require('express-session')
 const cors = require('cors')
 const multer = require('multer');
+const upload = require('./multer/multer');
 const credentials = require('./credentials')
 const app = express();
 
-const storage = multer.diskStorage({
-    destination: (req, file,cb) => {
-        cb(null, './images')
-    },
-    filename: (req, file, cb) => {
-        cb(null, file.originalname)
-    }
-})
-
-const upload = multer({storage: storage})
 app.use(express.static(__dirname + '/images'));
 app.use('/image', express.static('images'))
 
 
-app.post('/addfood', upload.single('image'), (req, res, next) => {
 
-    // To access image from backend http://localhost:5005/image/aimbot.png
-
-    const { foodname, foodprice } = req.body;
-    const image = req.file.filename
-    const sql = 'INSERT INTO food SET ?';
-    const sql1 = 'SELECT foodname FROM food WHERE foodname = ?';
-        connection.query(sql1, [foodname], (err, resultOfCheck) => {
-            if(resultOfCheck.length > 0) {
-                return res.status(401).json({ message: 'Under this name food already exists'})
-            } else {
-                connection.query(sql, {foodname: foodname, foodprice: foodprice, foodimage: image, fooddate: new Date()}, (err, resultOfInsert) => {
-                    if(resultOfInsert.affectedRows > 0) {
-                        return res.status(200).json({ message: 'You have added food!'})
-                    }  else {
-                        return res.status(401).json({ message: 'Something broke!'})
-                    }
-                })
-            }
-        })
-        
-
-    
-
-})
 
 require('./Passport/passport');
 
-
-
-
-app.set('view engine', 'ejs');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }))
 app.use(express.json()); 
@@ -99,11 +61,8 @@ app.get('/', (req, res) => {
     })
 })
     
-    
-app.use('/registerUser', require('./Routes/Users'))
+app.use('/users', require('./Routes/Users'))
 app.use('/food', require('./Routes/Food'))
-
-
 
 app.listen(5005, () => {
     console.log('radi server')

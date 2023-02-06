@@ -10,15 +10,7 @@ const RegisterUser = async (req, res) => {
     
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    const location = await geocoder.geocode(geolocation);
-    console.log('OVO JE LOKACIJA', location[0])
-    const test = await geocoder.batchGeocode([
-        'pljevlja narodna revolucija',
-        'pljevlja mila perunicica'
-    ])
-    console.log('OVO JE TO', test[1])                 
-    console.log('OVO JE TO', test[0])
-
+    const location = await geocoder.geocode(geolocation);   
 
     const sql = 'INSERT INTO users SET ?';
     const sql2 = 'SELECT username FROM users WHERE username = ?';
@@ -42,7 +34,6 @@ const RegisterUser = async (req, res) => {
                                 if(result.affectedRows > 0) {
                                     return res.status(201).json({message: 'You have registered'})
                                 } else {
-                                    console.log(err);
                                     return res.status(401).json({ message: 'Something went wrong'})
                                 }
                             })
@@ -57,11 +48,8 @@ const RegisterUser = async (req, res) => {
 }
 
 const handleLogin = async (req, res, next) => {
-    console.log('OVDE')
     passport.authenticate('local', (err, user, info) => {
-        console.log('OVDE NE')
         if(err) {
-            console.log(err);
             return
         }
         if(!user) {
@@ -72,7 +60,7 @@ const handleLogin = async (req, res, next) => {
                 console.log(err);
                 return res.status(401).json({message: 'Soemthing went wrong'})
             } else {
-                return res.json({ success: true })
+                return res.status(200).json({ success: true })
             }
         })
     })(req, res, next)
@@ -83,7 +71,7 @@ const updateUserToAdmin = (req, res) => {
     const sql =  'UPDATE users SET admin = 1 WHERE iduser = ?';
 
     if(req.user === undefined || req.user.admin === 0) {
-        return res.status(401);
+        return res.status(401).json({ message: 'Not allowed!'});
     } else {
         connection.query(sql, [iduser], (err, resultOfUpdate) => {
             if(resultOfUpdate.affectedRows > 0) {

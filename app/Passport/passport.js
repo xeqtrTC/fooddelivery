@@ -11,7 +11,6 @@ passport.use('local', new localStrategy({
     passwordField: 'password',
     passReqToCallback: true
 }, async (req, username, password, done) => {
-    console.log('ulazim', password)
 
     connection.query('SELECT * FROM users WHERE username = ?', [username], async (err, resultOfQuery) => {
         if(resultOfQuery.length > 0) {
@@ -19,12 +18,11 @@ passport.use('local', new localStrategy({
                 if(checkOfPassword) {
                     return done(null, resultOfQuery[0])
                 } else {
-                    console.log(err, 'nulladsadas');
                     return done(null, false, { message: 'Wrong username or password'})
                 }
             })
         } else {
-            console.log('ovaj error', err);
+            return done(null, false, { message: 'Wrong username or password or user doesnt exist'})
         }
     })
 
