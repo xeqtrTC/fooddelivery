@@ -1,6 +1,6 @@
 
 ##### Klonovati repository, uci u fooddelivery folder i uraditi docker-compose up.
-##### Ubaciti postman fajl u postman, prebaciti parametre na body i svi parametri bi trebali da budu tu, kada se dodaje hrana body mora biti form-data.
+##### Ubaciti postman fajl u postman, prebaciti parametre na body i svi parametri bi trebali da budu tu.
 ##### Na pocetku postoje samo 3 vrste hrane.
 ##### Za pristupanje admin profilu:
                username: vegait
